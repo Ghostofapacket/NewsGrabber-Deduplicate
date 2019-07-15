@@ -168,6 +168,13 @@ class MoveFiles(SimpleTask):
 
         shutil.rmtree("%(item_dir)s" % item)
 
+class DeleteFiles(SimpleTask):
+    def __init__(self):
+        SimpleTask.__init__(self, "DeleteFiles")
+
+    def process(self, item):
+        os.remove("data/completed/%(item_name)s.warc.gz" % item)
+
 class DedupeArgs(object):
     def realize(self, item):
         dedupe_args = [
@@ -265,6 +272,7 @@ pipeline = Pipeline(
             UploadToIAArgs()
         ),
     ),
+    DeleteFiles(),
     SendDoneToTracker(
         tracker_url="http://%s/%s" % (TRACKER_HOST, TRACKER_ID),
         stats=ItemValue("stats")
