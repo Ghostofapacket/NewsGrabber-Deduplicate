@@ -3,24 +3,15 @@ from distutils.version import StrictVersion
 import datetime
 import hashlib
 import os
-import random
 import shutil
 import socket
 import subprocess
 import sys
 import time
 import re
-import urllib
 from subprocess import call
-from internetarchive import upload as iaupload
 
 sys.path.insert(0, os.getcwd())
-
-import warcio
-from warcio.archiveiterator import ArchiveIterator
-from warcio.warcwriter import WARCWriter
-
-assert hasattr(warcio, 'ATWARCIO'), 'warcio was not imported correctly. Location: ' + warcio.__file__
 
 try:
     import requests
@@ -44,11 +35,9 @@ from seesaw.tracker import PrepareStatsForTracker, GetItemFromTracker, \
     UploadWithTracker, SendDoneToTracker
 from seesaw.util import find_executable
 
-
 # check the seesaw version
 if StrictVersion(seesaw.__version__) < StrictVersion("0.8.5"):
     raise Exception("This pipeline needs seesaw version 0.8.5 or higher.")
-
 
 ###########################################################################
 # Find a useful Wpull executable.
@@ -67,11 +56,12 @@ PYTHON35_EXE = find_executable(
     ]
 )
 
-access_key = os.environ.get('s3access')
-secret_key = os.environ.get('s3secret')
-
 if not PYTHON35_EXE:
     raise Exception("No usable python3.5 library found.")
+if not os.environ.get('s3access'):
+    raise Exception("s3 access key missing")
+if not os.environ.get('s3secret'):
+    raise Exception("s3 secret key missing")
 
 ###########################################################################
 # The version number of this pipeline definition.
@@ -121,41 +111,88 @@ class CheckIP(SimpleTask):
         else:
             self._counter -= 1
 
-
 class PrepareDirectories(SimpleTask):
     def __init__(self):
         SimpleTask.__init__(self, "PrepareDirectories")
 
     def process(self, item):
-        dirname = "/".join((item["item_name"], item["item_name"]))
+        dirname = "/".join((item['data_dir'], item['item_name']))
         if os.path.isdir(dirname):
             shutil.rmtree(dirname)
-
         os.makedirs(dirname)
-	open("%(item_dir)s/%(item)s.warc.gz" % item, "w").close()
+        completeddir = "data/completed"
+        if not os.path.isdir(completeddir):
+            print("making directories")
+            os.makedirs(completeddir)
+        item['item_dir'] = dirname
+
+class UploadToIAArgs(object):
+    def realize(self, item):
+        access_key = os.environ.get('s3access')
+        secret_key = os.environ.get('s3secret')
+        iaauth = ":".join((access_key,secret_key ))
+        file_name = "data/completed/%(item_name)s.warc.gz" % item
+        itemheader = "x-archive-meta-title:Archive Team Newsgrab: %(item_name)s" % item
+        destination = "https://s3.us.archive.org/archiveteam_%(item_name)s/%(item_name)s.megawarc.warc.gz" % item
+        sizehint = os.path.getsize(file_name)
+        UploadToIAArgs_args = [
+            "curl", "-v", "--location", "--fail",
+            "--speed-limit", "1", "--speed-time", "900", \
+            "--header", "x-archive-queue-derive:1", \
+            "--header", "x-archive-keep-old-version:0", \
+            "--header", "x-archive-meta-collection:archiveteam_newssites", \
+            "--header", "x-archive-meta-mediatype:web", \
+            "--header", itemheader, \
+            "--header", "x-archive-meta-language:eng", \
+            "--header", "x-archive-size-hint:" + str(sizehint), \
+            "--header", "authorization: LOW " + iaauth, \
+            "--upload-file", file_name, \
+            destination
+        ]
+        return realize(UploadToIAArgs_args, item)
+
+class UploadToIA(ExternalProcess):
+    '''Use curl to upload to IA.'''
+    def __init__(self, args):
+        print(args)
+        ExternalProcess.__init__(self, "UploadToIA",
+            args=args,)
 
 class MoveFiles(SimpleTask):
     def __init__(self):
         SimpleTask.__init__(self, "MoveFiles")
 
     def process(self, item):
-        os.rename("%(item_dir)s/%(warc_file_base)s.deduplicated.warc.gz" % item,
-              "%(data_dir)s/%(warc_file_base)s.deduplicated.warc.gz" % item)
+        os.rename("%(data_dir)s/%(item_name)s.deduplicated.warc.gz" % item,
+              "data/completed/%(item_name)s.warc.gz" % item)
 
         shutil.rmtree("%(item_dir)s" % item)
-		
+
 class DedupeArgs(object):
     def realize(self, item):
-        item_name = item['item_name']
-
         dedupe_args = [
             PYTHON35_EXE,
             "-u",
             "deduplicate.py",
-            ItemInterpolation("%(item_name)s/%(item_name)s.warc.gz"),
+            ItemInterpolation("%(data_dir)s/%(item_name)s.warc.gz"),
         ]
         return realize(dedupe_args, item)
-		
+
+class WgetArgs(object):
+    def realize(self, item):
+        item_name = item['item_name']
+        warcfile = item['data_dir'] + "/" + item['item_name'] + ".warc.gz"
+        wget_args = [
+            'wget',
+            '-nv',
+            '-U', 'ArchiveTeam; Googlebot/2.1',
+            '--tries', '5',
+            '--waitretry', '5',
+            '-O', warcfile,
+	    ItemInterpolation("https://archive.org/download/archiveteam_%(item_name)s/%(item_name)s.megawarc.warc.gz")
+        ]
+        return realize(wget_args, item)
+
 class DeduplicateWarcExtProc(ExternalProcess):
     '''Deduplicate warc and capture exceptions.'''
     def __init__(self, args):
@@ -167,12 +204,6 @@ class WgetDownload(ExternalProcess):
     def __init__(self, args):
         ExternalProcess.__init__(self, "WgetDownload",
             args=args,)
-
-class UploadToIA(SimpleTask):
-    '''Upload deduplicated warc and capture exceptions.'''
-    def process(self, item):
-        meta = dict(collection='archiveteam_newssites', title='Archive Team Newsgrab: "%(item_name)s" % item', mediatype='web')
-        response = iaupload('Archive Team Newsgrab: "%(item_name)s" % item', files=['"%(item_name)s/%(item_name)s.deduplicated.warc.gz" % item'], metadata=meta, headers='x-archive-keep-old-version:0', access_key=access_key, secret_key=secret_key)
 
 def get_hash(filename):
     with open(filename, 'rb') as in_file:
@@ -190,33 +221,6 @@ def stats_id_function(item):
     }
 
     return d
-
-class WgetArgs(object):
-    def realize(self, item):
-        item_name = item['item_name']
-        item_type, item_value = item_name.split(':', 1)
-
-        item['item_type'] = item_type
-        item['item_value'] = item_value
-
-        wget_args = [
-            WGET_EXE,
-            '-nv',
-            '-U', 'ArchiveTeam; Googlebot/2.1',
-            '--tries', '5',
-            '--waitretry', '5',
-            '-O', ItemInterpolation("%(item_name)s/%(item_name)s.warc.gz"),
-			"https://archive.org/download/%(item_name)s/%(item_name)s.megawarc.warc.gz"
-        ]
-
-        if 'bind_address' in globals():
-            wget_args.extend(['--bind-address', globals()['bind_address']])
-            print('')
-            print('*** Wget will bind address at {0} ***'.format(
-                globals()['bind_address']))
-            print('')
-
-        return realize(wget_args, item)
 
 ###########################################################################
 # Initialize the project.
@@ -236,7 +240,7 @@ pipeline = Pipeline(
     CheckIP(),
     GetItemFromTracker("http://%s/%s" % (TRACKER_HOST, TRACKER_ID), downloader,
         VERSION),
-    PrepareDirectories,
+    PrepareDirectories(),
     WgetDownload(
         WgetArgs(),
     ),
@@ -247,18 +251,20 @@ pipeline = Pipeline(
         defaults={"downloader": downloader, "version": VERSION},
         file_groups={
             "data": [
-                 ItemInterpolation("%(item_name)s/%(item_name)s.deduplicated.warc.gz")
+                 ItemInterpolation("%(data_dir)s/%(item_name)s.deduplicated.warc.gz")
             ]
         },
         id_function=stats_id_function,
     ),
     MoveFiles(),
-#    LimitConcurrent(
-#        NumberConfigValue(min=1, max=4, default="1",
-#            name="shared:rsync_threads", title="Rsync threads",
-#            description="The maximum number of concurrent uploads."),
-#        UploadToIA(),
-#    ),
+    LimitConcurrent(
+        NumberConfigValue(min=1, max=4, default="1",
+            name="shared:rsync_threads", title="Rsync threads",
+            description="The maximum number of concurrent uploads."),
+        UploadToIA(
+            UploadToIAArgs()
+        ),
+    ),
     SendDoneToTracker(
         tracker_url="http://%s/%s" % (TRACKER_HOST, TRACKER_ID),
         stats=ItemValue("stats")
