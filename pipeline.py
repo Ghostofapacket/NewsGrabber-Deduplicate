@@ -132,6 +132,7 @@ class PrepareDirectories(SimpleTask):
             shutil.rmtree(dirname)
 
         os.makedirs(dirname)
+	open("%(item_dir)s/%(item)s.warc.gz" % item, "w").close()
 
 class MoveFiles(SimpleTask):
     def __init__(self):
