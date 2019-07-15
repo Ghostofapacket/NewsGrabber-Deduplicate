@@ -181,13 +181,11 @@ def get_hash(filename):
 CWD = os.getcwd()
 PIPELINE_SHA256 = get_hash(os.path.join(CWD, 'pipeline.py'))
 WARRIOR_INSTALL_SHA256 = get_hash(os.path.join(CWD, 'warrior-install.sh'))
-WPULL_BOOTSTRAP_SHA256 = get_hash(os.path.join(CWD, 'wpull_bootstrap'))
 
 def stats_id_function(item):
     d = {
         'pipeline_hash': PIPELINE_SHA256,
         'warrior_install_hash': WARRIOR_INSTALL_SHA256,
-        'wpull_bootstrap_hash': WPULL_BOOTSTRAP_SHA256,
         'python_version': sys.version,
     }
 
