@@ -128,11 +128,12 @@ class PrepareDirectories(SimpleTask):
 
     def process(self, item):
         dirname = "/".join((item["item_name"], item["item_name"]))
-
         if os.path.isdir(dirname):
             shutil.rmtree(dirname)
 
         os.makedirs(dirname)
+
+open("%(item_dir)s/%(warc_file_base)s.warc.gz" % item, "w").close()
 
 class MoveFiles(SimpleTask):
     def __init__(self):
