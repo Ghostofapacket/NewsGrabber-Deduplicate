@@ -58,7 +58,6 @@ if StrictVersion(seesaw.__version__) < StrictVersion("0.8.5"):
 # 2. prints the required version string
 WGET_EXE = find_executable(
     "wget",
-    re.compile(r"\b1\.2\.3\b"),
     [
         "wget",
 
