@@ -56,13 +56,6 @@ if StrictVersion(seesaw.__version__) < StrictVersion("0.8.5"):
 # WPULL_EXE will be set to the first path that
 # 1. does not crash with --version, and
 # 2. prints the required version string
-WGET_EXE = find_executable(
-    "wget",
-    [
-        "wget",
-
-    ]
-)
 PYTHON35_EXE = find_executable(
     "Python 3.5",
     re.compile(r"^Python 3\.5"),
@@ -76,9 +69,6 @@ PYTHON35_EXE = find_executable(
 
 access_key = os.environ.get('s3access')
 secret_key = os.environ.get('s3secret')
-
-if not WGET_EXE:
-    raise Exception("No usable Wpull found.")
 
 if not PYTHON35_EXE:
     raise Exception("No usable python3.5 library found.")
