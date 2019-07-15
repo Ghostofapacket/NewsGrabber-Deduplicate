@@ -12,7 +12,7 @@ import time
 import re
 import urllib
 from subprocess import call
-from intenetarchive import upload as iaupload
+from internetarchive import upload as iaupload
 
 sys.path.insert(0, os.getcwd())
 
