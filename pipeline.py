@@ -91,7 +91,7 @@ if not PYTHON35_EXE:
 # It will be added to the WARC files and reported to the tracker.
 VERSION = "20190713.01"
 TRACKER_ID = 'newsgrabber-dedupe'
-TRACKER_HOST = 'tracker.archiveteam.org'
+TRACKER_HOST = 'tracker.leech0r.co.uk'
 
 
 ###########################################################################
@@ -266,12 +266,12 @@ pipeline = Pipeline(
         id_function=stats_id_function,
     ),
     MoveFiles(),
-    LimitConcurrent(
-        NumberConfigValue(min=1, max=4, default="1",
-            name="shared:rsync_threads", title="Rsync threads",
-            description="The maximum number of concurrent uploads."),
-        UploadToIA(),
-    ),
+#    LimitConcurrent(
+#        NumberConfigValue(min=1, max=4, default="1",
+#            name="shared:rsync_threads", title="Rsync threads",
+#            description="The maximum number of concurrent uploads."),
+#        UploadToIA(),
+#    ),
     SendDoneToTracker(
         tracker_url="http://%s/%s" % (TRACKER_HOST, TRACKER_ID),
         stats=ItemValue("stats")
