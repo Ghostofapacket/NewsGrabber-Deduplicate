@@ -133,8 +133,6 @@ class PrepareDirectories(SimpleTask):
 
         os.makedirs(dirname)
 
-open("%(item_dir)s/%(warc_file_base)s.warc.gz" % item, "w").close()
-
 class MoveFiles(SimpleTask):
     def __init__(self):
         SimpleTask.__init__(self, "MoveFiles")
