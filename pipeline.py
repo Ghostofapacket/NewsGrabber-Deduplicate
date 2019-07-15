@@ -90,8 +90,8 @@ if not PYTHON35_EXE:
 # Update this each time you make a non-cosmetic change.
 # It will be added to the WARC files and reported to the tracker.
 VERSION = "20190713.01"
-TRACKER_ID = 'newsgrabber-dedupe'
-TRACKER_HOST = 'tracker.leech0r.co.uk'
+TRACKER_ID = 'ng-dedupetst'
+TRACKER_HOST = 'tracker.kiska.pw'
 
 
 ###########################################################################
